@@ -10,8 +10,20 @@ const openai = new OpenAI();
 
 const servient = new Servient();
 servient.addServer(new HttpServer());
-servient.addServer(new MqttBrokerServer({ uri: "mqtt://test.mosquitto.org" }));
-servient.addClientFactory(new MqttClientFactory());
+servient.addServer(new MqttBrokerServer({
+  uri: `mqtts://${process.env.MQTT_HOST}:8885`,
+  username: process.env.MQTT_USER,
+  password: process.env.MQTT_PASS,
+  rejectUnauthorized: false // se for self-signed, senão podes omitir
+}));
+
+servient.addClientFactory(new MqttClientFactory({
+  uri: `mqtts://${process.env.MQTT_HOST}:8885`,
+  username: process.env.MQTT_USER,
+  password: process.env.MQTT_PASS,
+  rejectUnauthorized: false
+}));
+
 
 const client = new MongoClient(process.env.MONGO_URI);
 
@@ -165,6 +177,8 @@ async function bindAnalyzerHandlers(thing, datacollection, locationcollection) {
 
 
     thing.setPropertyReadHandler("sensorDataReceived", async () => {
+
+        thing.emitEvent("badFood", `Remove the food from the tray NOW!`);
             // Check if uriVariables are provided
         return sensorData;
     });

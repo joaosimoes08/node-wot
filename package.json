@@ -5,6 +5,7 @@
     "@node-wot/binding-mqtt": "^0.9.1",
     "@node-wot/core": "^0.9.1",
     "dotenv": "^17.1.0",
-    "mongodb": "^6.17.0"
+    "mongodb": "^6.17.0",
+    "openai": "^5.8.4"
   }
 }
