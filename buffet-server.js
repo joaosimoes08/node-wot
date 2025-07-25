@@ -14,7 +14,7 @@ servient.addServer(new MqttBrokerServer({
   uri: `mqtts://${process.env.MQTT_HOST}:8885`,
   username: process.env.MQTT_USER,
   password: process.env.MQTT_PASS,
-  rejectUnauthorized: false // se for self-signed, senão podes omitir
+  rejectUnauthorized: false
 }));
 
 servient.addClientFactory(new MqttClientFactory({
@@ -124,14 +124,11 @@ async function bindAnalyzerHandlers(thing, datacollection, locationcollection) {
 
     thing.setPropertyWriteHandler("sensorDataReceived", async (val, options) => {
         const id = thing.id
-        console.log("🔥 writeproperty MQTT chamado!");
         try {
             const payload = await val.value();
             console.log("[DEBUG] Payload recebido:", payload);
 
             const { sensorId, temperature, humidity, co2, tvoc } = payload || {};
-
-            console.log(payload)
 
             if (!sensorId) {
                 console.error("[ERROR] sensorId ausente.");
@@ -161,10 +158,6 @@ async function bindAnalyzerHandlers(thing, datacollection, locationcollection) {
                 timestamp: new Date()
             };
 
-            console.log("[DEBUG] Documento a inserir:", document);
-
-            // Conexão com o Mongo (certifique-se que está definida corretamente)
-            thing.emitEvent("humidityAlert", `Hello World.`);
             await datacollection.insertOne(document);
 
             console.log("✅ Dados do sensor inseridos com sucesso!");
@@ -292,32 +285,47 @@ thing.setPropertyWriteHandler("photo", async (val) => {
     try {
         const base64Image = await val.value();
 
-        const answer = await GPT_Veredict(
-            sensorData.co2,
-            sensorData.temperature,
-            sensorData.tvoc,
-            base64Image
-        );
+        // Chamada à API local correta (segundo o curl)
+        const response = await fetch("http://192.168.137.248:8000/classificar", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ imagem_base64: base64Image })
+        });
 
-        console.log("🤖 Resposta da IA:", answer);
+        if (!response.ok) {
+            throw new Error(`Erro na chamada à API: ${response.statusText}`);
+        }
 
-        if (!answer) {
-            console.error("❌ Erro: A resposta da IA foi vazia ou indefinida.");
+        const result = await response.json();
+
+        console.log("🤖 Resposta da API local:", result);
+
+        if (!result || !result.resultado) {
+            console.error("❌ Erro: A resposta da API está vazia ou mal formatada.");
             return;
         }
 
-        if (answer.toLowerCase() === "yes") {
-            console.log("Alimento em bom estado");
-        } else {
+        const verdict = result.resultado.toUpperCase();
+
+        if (verdict === "APTO") {
+            console.log("✅ Alimento em bom estado");
+        } else if (verdict === "INAPTO") {
+            console.warn("⚠️ Alimento em MAU estado!");
             thing.emitEvent("badFood", `Remove the food from the tray NOW!`);
             fetch("http://192.168.137.248:8080/buffet-food-quality-analyzer-01/actions/closeBuffet", {
                 method: "POST"
             });
+        } else {
+            console.warn(`⚠️ Resposta inesperada da API: ${verdict}`);
         }
+
     } catch (err) {
         console.error("❌ Erro no writeHandler de 'photo':", err);
     }
 });
+
 
 
 }
